@@ -1,4 +1,3 @@
-
 local addon_name, Addon = ...
 
 WCLPerf = LibStub("AceAddon-3.0"):NewAddon("WCLPerformance")

@@ -4,7 +4,7 @@
 ## Title-zhCN: WCL团本评分
 ## Notes-zhCN: 在统计插件中显示当前团本DPS和HPS的WCL评分
 ## Author: Eleven [陽光-死亡之翼]
-## Version: 0.1.0
+## Version: @project-version@
 ## DefaultState: Enabled
 
 ## X-Curse-Project-ID: 387804
