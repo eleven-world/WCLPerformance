@@ -1,4 +1,4 @@
-package-as: AddonProfileShare
+package-as: WCLPerformance
 enable-nolib-creation: no
 
 externals:
