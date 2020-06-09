@@ -7,6 +7,31 @@ Core.addon_name = "WCLPerformance"
 Core.title = GetAddOnMetadata(Core.addon_name, "Title")
 Core.version = GetAddOnMetadata(Core.addon_name, "Version")
 
+function Core:OnInitialize()
+	local db_defaults = {
+		global = {
+			update = {}
+		},
+		profile = {
+			config = {
+				show_left = false,
+				show_right = true,
+				color = true,
+				bracket = true,
+				only_role_spec = true,
+			},
+			report = {
+				disable = false,
+				raid_channel = true,
+			},
+			update = {
+				disable = false,
+			},
+		}
+	}
+	self.db = LibStub("AceDB-3.0"):New("WCLPerformance_DB", db_defaults,"default")
+end
+
 
 local function _secure_call (...)
 	local success, result, result2 = pcall(...)
@@ -16,12 +41,12 @@ local function _secure_call (...)
 end
 
 
-function Core:LoadDB()
-	if WCLPerf_Database then
-		self.db = WCLPerf_Database
-	end
-	return self.db
-end
+-- function Core:LoadDB()
+-- 	if WCLPerf_Database then
+-- 		self.db = WCLPerf_Database
+-- 	end
+-- 	return self.db
+-- end
 
 Core.zone_to_addon = {
 	[24] = "WCLPerformance_Database_Nyalotha",
@@ -30,6 +55,9 @@ Core.zone_to_addon = {
 Core.addon_to_zone = {
 	["WCLPerformance_Database_Nyalotha"] = {24},
 }
+
+
+Core.zone_db = {}
 
 Core.encounter_to_zone = {
 	[2329] = 24, 
@@ -53,6 +81,8 @@ function Core:GetPerf_Raw(player_amount, metric, encounter, difficulty, class_id
 	local zoneID = self.encounter_to_zone[encounter]
 	local db = self:GetZoneDB(zoneID)
 	if not db then return nil end
+	local has_spec = self:GetSpecPage(metric, encounter, difficulty, class_id, spec)
+	if not has_spec then return nil end
 	local up, down, up_amount, down_amount
 	for _,percentile in ipairs(percentiles) do
 		amount = self:GetPercentileAmount(percentile, metric, encounter, difficulty, class_id, spec)
@@ -81,20 +111,66 @@ end
 
 function Core:GetZoneDB(zoneID)
 	if not zoneID then return nil end
+	if self.zone_db[zoneID] == false then 
+		return nil
+	elseif self.zone_db[zoneID] then
+		return self.zone_db[zoneID] 
+	end
+	-- if nil
+	return self:ZoneDBRefresh(zoneID)
+end
+
+
+function Core:ZoneDBRefresh(zoneID)
+	local db_version = self.db.global.update.date
+
+	local addon_version
 	local addon_name = Core.zone_to_addon[zoneID]
-	if IsAddOnLoaded(addon_name) then
-		return WCLPerf_Database and WCLPerf_Database[zoneID]
-	elseif select(5,GetAddOnInfo(addon_name)) ~= "MISSING" then
-		LoadAddOn(addon_name)
+	if addon_name then addon_version = self:GetAddonVersion(addon_name) end
+
+	local db_source
+	if db_version and addon_version then
+		if db_version >= addon_version then db_source = "db" else db_source = "addon" end
+	else 
+		if db_version then db_source = "db" end
+		if addon_version then db_source = "addon" end
+	end
+
+	if db_source == "db" then
+		self.zone_db[zoneID] = self.db.global.update.data[zoneID]
+	elseif db_source == "addon" then
+		if not IsAddOnLoaded(addon_name) then LoadAddOn(addon_name) end
+		self.zone_db[zoneID] = WCLPerf_Database and WCLPerf_Database[zoneID]
+	else
+		self.zone_db[zoneID] = false
+		return nil
+	end
+	return self.zone_db[zoneID]
+end
+
+
+function Core:GetAddonVersion( addon_name )
+	local success, version = pcall(function () return date("%y%m%d", tonumber(GetAddOnMetadata(addon_name, "X-Update-Date"))) end)
+	if success then return version else print(version) end
+end
+
+function Core:GetSpecPage(metric, encounter, difficulty, class_id, spec)
+	local zoneID = self.encounter_to_zone[encounter]
+	local db = self:GetZoneDB(zoneID)
+	if not db then return nil end
+	if zoneID == 24 then	--maybe different structure for other raids
+		local found, data = pcall(function () return db.data[metric][encounter][difficulty][spec] end)
+		if found then return data else return nil end
 	end
 end
+
 
 function Core:GetPercentileAmount(percentile, metric, encounter, difficulty, class_id, spec)
 	local zoneID = self.encounter_to_zone[encounter]
 	local db = self:GetZoneDB(zoneID)
 	if not db then return nil end
 	if zoneID == 24 then	--maybe different structure for other raids
-		local found, amount = pcall(function () return db.data[metric][encounter][difficulty][percentile][class_id][spec][1] end)
+		local found, amount = pcall(function () return db.data[metric][encounter][difficulty][spec][percentile] end)
 		if found then return amount else return nil end
 	end
 end
@@ -145,6 +221,15 @@ function Core:ClassFileToID(classFile)
 	return self.class_id_list[classFile] or 0
 end
 
+Core.healer_spec = {[105] = true, [65] = true, [256] = true, [257] = true, [264] = true, [270] = true,}
+
+function Core:IsSpecRole(spec, metric, force)
+	local only_role_spec = self.db.profile.config.only_role_spec
+	if not only_role_spec and not force then return true end
+    if (metric == 'dps' and Core.healer_spec[spec]) or (metric == 'hps' and not Core.healer_spec[spec]) then return false end 
+    return true
+end
+
 function Core:DetailsText_Raw(...)
 	local player, combat, instance = ...; 
     local player_amount, metric, encounter, difficulty, class, spec
@@ -164,22 +249,23 @@ function Core:DetailsText_Raw(...)
     else
         return ""
     end
-    local guid = player:guid() or playe.serial
+    local guid = player:guid() or player.serial
     class = player:class()
     local class_id = self:ClassFileToID(class)
     spec = player.spec or Details:GetSpec(guid)
     if not (class and spec) then return "" end
+    if not self:IsSpecRole(spec, metric) then return "" end
     -- encounter = 2333
-    -- difficulty = 5
+    -- difficulty = 16
     -- print("DetailsText_Raw", player_amount, metric, encounter, difficulty, class_id, spec)
     local text 
-    local setting = self.db.profile.details
-    if setting.color then
+    local config = self.db.profile.config
+    if config.color then
     	text = self:GetColoredPerf(player_amount, metric, encounter, difficulty, class_id, spec)
     else
     	text = self:GetPerf(player_amount, metric, encounter, difficulty, class_id, spec)
     end
-    if setting.bracket then
+    if config.bracket then
     	text = text and '[' .. text .. ']'
     end
     return text or ""

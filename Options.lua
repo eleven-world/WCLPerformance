@@ -11,17 +11,6 @@ local _,i,j,k,v
 local community_hidden = GetCurrentRegion() ~= 5
 
 function Options:OnInitialize()
-	self.db_defaults = {
-		profile = {
-			details = {
-				show_left = false,
-				show_right = true,
-				color = true,
-				bracket = true,
-			}
-		}
-	}
-	Core.db = LibStub("AceDB-3.0"):New("WCLPerformance_DB",self.db_defaults,"default")
 	self.db = Core.db.profile
 	self:Options_Create()
 	self:Options_Register()
@@ -55,12 +44,6 @@ function Options:Options_Create()
 						func = "JoinCommunity",
 						order = 2,
 					},
-					-- note = {
-					-- 	type = "description",
-					-- 	name = function () return select(3,GetAddOnInfo(self.addon_name)) end,
-					-- 	fontSize = "medium",
-					-- 	order = 3,
-					-- },
 					author = {
 						type = "description",
 						name = "|cffffd100Author: |r" .. GetAddOnMetadata(self.addon_name, "Author"),
@@ -76,8 +59,8 @@ function Options:Options_Create()
 	    	},
 	    },
 	}
-	self.options.args.details = self:Options_Create_Details()
-	self.options.args.skada = self:Options_Create_Skada()
+	self.options.args.config = self:Options_Create_Config()
+	-- self.options.args.skada = self:Options_Create_Skada()
 	self.options.args.database = self:Options_Create_Database()
 end
 
@@ -92,10 +75,11 @@ end
 排名加[]包围
 
 ]]
-function Options:Options_Create_Details()
-	local setting = self.db.details
+function Options:Options_Create_Config()
+	local config = self.db.config
+	local report = self.db.report
 	local options = {
-	    name = "Details",
+	    name = "配置选项",
 	    handler = self,
 	    type = 'group',
 	    -- inline = true,
@@ -104,7 +88,7 @@ function Options:Options_Create_Details()
 	    args = {
 	    	show_setting = {
 	    		type = "group",
-	    		name = "必要设置",
+	    		name = "Details必要设置",
 	    		inline = true,
 	    		order = 1,
 	    		args = {
@@ -122,16 +106,16 @@ function Options:Options_Create_Details()
 			    		type = "toggle",
 			    		name = "左侧显示",
 			    		desc = "WCL分数显示在名字前面",
-			    		get = function () return setting.show_left end,
-			    		set = function (info, val) setting.show_left = val end,
+			    		get = function () return config.show_left end,
+			    		set = function (info, val) config.show_left = val end,
 			    		order = 12,
 			    	},
 			    	show_right = {
 			    		type = "toggle",
 			    		name = "右侧显示",
 			    		desc = "WCL分数显示在DPS/HPS值后面",
-			    		get = function () return setting.show_right end,
-			    		set = function (info, val) setting.show_right = val end,
+			    		get = function () return config.show_right end,
+			    		set = function (info, val) config.show_right = val end,
 			    		order = 13,
 			    	},
 	    			custom_text_info = {
@@ -197,7 +181,7 @@ function Options:Options_Create_Details()
 	    	},
 	    	custom_setting = {
 	    		type = "group",
-	    		name = "自定义设置",
+	    		name = "显示设置",
 	    		inline = true,
 	    		order = 2,
 	    		args = {
@@ -210,16 +194,48 @@ function Options:Options_Create_Details()
 						type = "toggle",
 						name = "显示WCL分数颜色",
 						desc = "例： |cffe6cc80100|r,|cffff800090|r,|cffa335ee75|r,|cff0070dd50|r,|cff1eff0025|r",
-						get = function () return setting.color end,
-						set = function (info, val) setting.color = val end,
+						get = function () return config.color end,
+						set = function (info, val) config.color = val end,
 						order = 1,
 					},
 					bracket = {
 						type = "toggle",
 						name = "数字加[]",
 						desc = "例： [|cffff800090|r]",
-						get = function () return setting.bracket end,
-						set = function (info, val) setting.bracket = val end,
+						get = function () return config.bracket end,
+						set = function (info, val) config.bracket = val end,
+						order = 2,
+					},
+					only_role_spec = {
+						type = "toggle",
+						name = "只显示对应职责",
+						desc = "DPS职业不显示治疗评分，治疗职业不显示DPS评分",
+						get = function () return config.only_role_spec end,
+						set = function (info, val) config.only_role_spec = val end,
+						order = 3,
+					},
+	    		},
+	    	},
+			report = {
+	    		type = "group",
+	    		name = "报告设置",
+	    		inline = true,
+	    		order = 3,
+	    		args = {
+					disable = {
+						type = "toggle",
+						name = "战斗结束后自动显示报告",
+						desc = "战斗结束后自动显示报告",
+						get = function () return not report.disable end,
+						set = function (info, val) report.disable = not val end,
+						order = 1,
+					},
+					raid_channel = {
+						type = "toggle",
+						name = "使用团队频道",
+						desc = "战斗报告将发送在团队频道（仅史诗模式，非过期数据）",
+						get = function () return report.raid_channel end,
+						set = function (info, val) report.raid_channel = val end,
 						order = 2,
 					},
 	    		},
@@ -229,38 +245,68 @@ function Options:Options_Create_Details()
 	return options
 end
 
-function Options:Options_Create_Skada()
-	local setting = self.db.skada
-	local options = {
-	    name = "Skada",
-	    handler = self,
-	    type = 'group',
-	    disabled = function () if not Skada then return true end end,
-	    -- inline = true,
-	    order = 12,
-	    args = {
-	    	info = {
-				type = "description",
-				name = "Skada支持暂未完成，由于Skada不追踪和记录天赋，需要好好研究一下方法",
-	    		order = 1,
-			},
-	    }
+-- function Options:Options_Create_Skada()
+-- 	local setting = self.db.skada
+-- 	local options = {
+-- 	    name = "Skada",
+-- 	    handler = self,
+-- 	    type = 'group',
+-- 	    disabled = function () if not Skada then return true end end,
+-- 	    -- inline = true,
+-- 	    order = 12,
+-- 	    args = {
+-- 	    	info = {
+-- 				type = "description",
+-- 				name = "Skada支持暂未完成，由于Skada不追踪和记录天赋，需要好好研究一下方法",
+-- 	    		order = 1,
+-- 			},
+-- 	    }
 
-	}
-	return options
-end
+-- 	}
+-- 	return options
+-- end
 
 function Options:Options_Create_Database()
+	local update = Core.db.profile.update
 	local options = {
 	    name = "数据库信息",
 	    handler = self,
 	    type = 'group',
 	    order = 21,
 	    args = {
-	    	info = {
-				type = "description",
-				name = "",
-	    		order = 1,
+	    	disable_update = {
+				type = "toggle",
+				name = "禁用在线更新",
+				get = function () return update.disable end,
+				set = function (info, val) update.disable = val Core.Update:RegisterUpdateChannels() end,
+				order = 1,
+			},
+	    	saved_database = {
+				type = "group",
+				name = "在线更新数据库",
+				inline = true,
+				disabled = function () return update.disable end,
+	    		order = 2,
+	    		args = {
+	    			version = {
+	    				type = "description",
+	    				name = function () return self:SavedDatabase_GetVersion() end,
+	    				order = 1,
+	    			},
+	    			update_button = {
+	    				type = "execute",
+	    				name = "加入团队自动更新",
+	    				disabled = function () return not self:SavedDatabase_IsUpdateNeed() end,
+	    				func = "SavedDatabase_JoinUpdateGroup",
+	    				confirm = function () return self:SavedDatabase_Confirm() end,
+	    				order = 2,
+	    			},
+	    			desc = {
+	    				type = "description",
+	    				name = "\n|cffffd100在线更新说明：|r\n - 仅支持|cffffd100国服部落|r，更新过程需要2-3分钟；\n - 点击按钮会发消息给我小号，|cffffd100如果在线的话|r，会邀请进入团队；\n - 进入团队后，小号自动发送更新数据，插件会自动接收数据；\n - 接收完成，插件自动退出团队；\n - 在线更新数据由于传输效率较低，仅包括|cffffd100史诗难度、对应职责|r的数据；\n - |cffff0000不要在团队中说话！不要在团队中说话！不要在团队中说话！|r会被加入黑名单！\n",
+	    				order = 3,
+	    			},
+	    		},
 			},
 	    },
 	}
@@ -324,17 +370,15 @@ function Options:JoinCommunity()
 end
 
 function Options:Details_SetCustomText()
-	local setting = self.db.details
-	local show_left = setting.show_left
-	local show_right = setting.show_right
+	local config = self.db.config
+	local show_left = config.show_left
+	local show_right = config.show_right
 	local left_text = [[{func return WCLPerf and WCLPerf:DetailsText(...) or ""}{data3}{data2}]]
 	local right_text = [[{data1} ({data2}) {func return WCLPerf and WCLPerf:DetailsText(...) or ""}]]
-	for i = 1, 10 do
-		local instance = Details:GetInstance(i)
-		if instance then
-			--instance:SetBarTextSettings (size, font, fixedcolor, leftcolorbyclass, rightcolorbyclass, leftoutline, rightoutline, customrighttextenabled, customrighttext, percentage_type, showposition, customlefttextenabled, customlefttext, translittest)
-			instance:SetBarTextSettings (nil, nil, nil, nil, nil, nil, nil, show_right, right_text, nil, nil, show_left, left_text, nil)
-	   end
+
+	for _, instance in ipairs (Details.tabela_instancias) do
+		--instance:SetBarTextSettings (size, font, fixedcolor, leftcolorbyclass, rightcolorbyclass, leftoutline, rightoutline, customrighttextenabled, customrighttext, percentage_type, showposition, customlefttextenabled, customlefttext, translittest)
+		instance:SetBarTextSettings (nil, nil, nil, nil, nil, nil, nil, show_right, right_text, nil, nil, show_left, left_text, nil)
 	end
 end
 
@@ -344,11 +388,8 @@ function Options:Details_SetCustomText_Reset()
 	local left_text = [[{data1}. {data3}{data2}]]
 	local right_text = [[{data1} ({data2}, {data3}%)]]
 
-	for i = 1, 10 do
-		local instance = Details:GetInstance(i)
-		if instance then
-			instance:SetBarTextSettings (nil, nil, nil, nil, nil, nil, nil, show_right, right_text, nil, nil, show_left, left_text, nil)
-		end
+	for _, instance in ipairs (Details.tabela_instancias) do
+		instance:SetBarTextSettings (nil, nil, nil, nil, nil, nil, nil, show_right, right_text, nil, nil, show_left, left_text, nil)
 	end
 end
 
@@ -389,4 +430,40 @@ function Options:GetAddonInstances(addon_name)
 		if link then all = all .. link end
 	end
 	return all
+end
+
+function Options:SavedDatabase_GetVersion()
+	local db_version = Core.db.global.update.date
+	local addon_version = Core.Update:GetAddonMinVersion()
+	local today = Core.Update:GetCurrentDate()
+	local version_string = ''
+	if db_version then
+		version_string = version_string .. "在线更新数据库版本"..db_version .. '\n'
+	else
+		version_string = version_string .. "没有找到在线更新数据库" .. '\n'		
+	end
+	if addon_version then
+		version_string = version_string .. "插件内置数据库版本"..addon_version .. '\n'
+	else
+		version_string = version_string .. "没有找到插件内置数据库" .. '\n'		
+	end
+	if Core.Update:IsUpdateNeed() then version_string = version_string .. "|cffff0000需要更新|r" else version_string = version_string .. "|cff00ff00无需更新|r" end
+	return version_string
+end
+
+function Options:SavedDatabase_IsUpdateNeed()
+	return Core.Update:IsUpdateNeed()
+end
+
+function Options:SavedDatabase_JoinUpdateGroup()
+	local sender = Core.Update.author_sender
+	local invite_message = Core.Update.invite_message
+	if not (sender and invite_message) then return nil end
+	SendChatMessage(invite_message, "WHISPER", nil, sender)
+end
+
+function Options:SavedDatabase_Confirm()
+	local sender = Core.Update.author_sender
+	if not sender then return nil end
+	return "即加将入团队，在团队中会自动更新数据库，请注意组队邀请：" .. sender
 end

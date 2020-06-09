@@ -6,10 +6,13 @@
 ## Author: Eleven [陽光-死亡之翼]
 ## Version: @project-version@
 ## DefaultState: Enabled
+## SavedVaribles: WCLPerformance_DB
 
 ## X-Curse-Project-ID: 387804
 
 embeds.xml
 
 Core.lua
+Update.lua
+Report.lua
 Options.lua
