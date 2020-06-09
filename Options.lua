@@ -283,7 +283,7 @@ function Options:Options_Create_Database()
 			},
 	    	saved_database = {
 				type = "group",
-				name = "在线更新数据库",
+				name = "在线更新数据库（试验中）",
 				inline = true,
 				disabled = function () return update.disable end,
 	    		order = 2,

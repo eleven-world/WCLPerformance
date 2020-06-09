@@ -20,7 +20,7 @@ function Update:OnInitialize()
 	if GetCurrentRegion() ~= 5 then
 		self.disable = true
 	elseif UnitFactionGroup("player") == "Horde" then --部落
-		self.author_sender = "陽光-死亡之翼"
+		self.author_sender = "数据更新员-亚雷戈斯"
 		self.invite_message = "组我更新WCL数据库"
 	else
 		self.disable = true
